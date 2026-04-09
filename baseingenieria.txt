@@ -1,0 +1,167 @@
+-- =====================================================
+-- BASE DE DATOS: CONEXIONES_ESTRUCTURALES_IC
+-- =====================================================
+
+-- Crear la base de datos
+CREATE DATABASE conexiones_estructurales;
+
+-- Conectarse a la nueva base de datos
+\c conexiones_estructurales
+
+-- 1. TABLA: MATERIALES
+CREATE TABLE materiales (
+    id_material SERIAL PRIMARY KEY,
+    nombre_material VARCHAR(50) NOT NULL,
+    tipo VARCHAR(30),
+    fy NUMERIC(8,2),
+    fu NUMERIC(8,2),
+    modulo_elasticidad NUMERIC(10,2)
+);
+
+-- 2. TABLA: PERFILES_ESTRUCTURALES
+CREATE TABLE perfiles_estructurales (
+    id_perfil SERIAL PRIMARY KEY,
+    nombre_perfil VARCHAR(30) NOT NULL,
+    tipo_perfil VARCHAR(20),
+    altura_mm NUMERIC(6,1),
+    ancho_mm NUMERIC(6,1),
+    espesor_alma_mm NUMERIC(5,2),
+    espesor_ala_mm NUMERIC(5,2),
+    peso_kg_m NUMERIC(8,2),
+    id_material INTEGER REFERENCES materiales(id_material)
+);
+
+-- 3. TABLA: UNIONES_ATORNILLADAS
+CREATE TABLE uniones_atornilladas (
+    id_union SERIAL PRIMARY KEY,
+    nombre_union VARCHAR(50),
+    tipo_conexion VARCHAR(30),
+    numero_pernos INTEGER,
+    diametro_perno_mm NUMERIC(5,2),
+    clase_perno VARCHAR(10),
+    pretension_kn NUMERIC(8,2),
+    id_perfil_viga INTEGER REFERENCES perfiles_estructurales(id_perfil),
+    id_perfil_columna INTEGER REFERENCES perfiles_estructurales(id_perfil)
+);
+
+-- 4. TABLA: SOLDADURAS
+CREATE TABLE soldaduras (
+    id_soldadura SERIAL PRIMARY KEY,
+    tipo_soldadura VARCHAR(30),
+    electrodo VARCHAR(20),
+    resistencia_ultima_mpa NUMERIC(8,2),
+    garganta_mm NUMERIC(5,2),
+    longitud_mm NUMERIC(8,2),
+    id_union INTEGER REFERENCES uniones_atornilladas(id_union)
+);
+
+-- 5. TABLA: NUDOS_ESTRUCTURALES
+CREATE TABLE nudos_estructurales (
+    id_nudo SERIAL PRIMARY KEY,
+    codigo_nudo VARCHAR(10) NOT NULL,
+    coordenada_x NUMERIC(8,2),
+    coordenada_y NUMERIC(8,2),
+    coordenada_z NUMERIC(8,2),
+    restriccion_gdl VARCHAR(20),
+    observaciones TEXT
+);
+
+-- 6. TABLA: ELEMENTOS_POR_NUDO
+CREATE TABLE elementos_por_nudo (
+    id_relacion SERIAL PRIMARY KEY,
+    id_nudo INTEGER REFERENCES nudos_estructurales(id_nudo),
+    id_perfil INTEGER REFERENCES perfiles_estructurales(id_perfil),
+    id_union INTEGER REFERENCES uniones_atornilladas(id_union),
+    angulo_incidencia_grados NUMERIC(5,2),
+    es_continuo BOOLEAN DEFAULT false
+);
+
+-- 7. TABLA: CARGAS_EN_NUDOS
+CREATE TABLE cargas_en_nudos (
+    id_carga SERIAL PRIMARY KEY,
+    id_nudo INTEGER REFERENCES nudos_estructurales(id_nudo),
+    fx_kn NUMERIC(8,2),
+    fy_kn NUMERIC(8,2),
+    fz_kn NUMERIC(8,2),
+    mx_knm NUMERIC(8,2),
+    my_knm NUMERIC(8,2),
+    mz_knm NUMERIC(8,2),
+    combinacion VARCHAR(30),
+    fecha_registro DATE DEFAULT CURRENT_DATE
+);
+
+-- 8. TABLA: INSPECCIONES_CONEXIONES
+CREATE TABLE inspecciones_conexiones (
+    id_inspeccion SERIAL PRIMARY KEY,
+    id_union INTEGER REFERENCES uniones_atornilladas(id_union),
+    fecha_inspeccion DATE,
+    estado VARCHAR(20),
+    torque_medido_nm NUMERIC(8,2),
+    observaciones TEXT
+);
+
+-- =====================================================
+-- INSERCIÓN DE DATOS
+-- =====================================================
+
+INSERT INTO materiales (nombre_material, tipo, fy, fu, modulo_elasticidad) VALUES
+('Acero A36', 'Acero', 250, 400, 200000),
+('Acero A992', 'Acero', 345, 450, 200000),
+('Hormigón HA-30', 'Hormigón', 30, 38, 30000);
+
+INSERT INTO perfiles_estructurales (nombre_perfil, tipo_perfil, altura_mm, ancho_mm, espesor_alma_mm, espesor_ala_mm, peso_kg_m, id_material) VALUES
+('IPE-300', 'IPE', 300, 150, 7.1, 10.7, 42.2, 2),
+('HEB-200', 'HEB', 200, 200, 9.0, 15.0, 61.3, 2),
+('RHS-150x150x6', 'RHS', 150, 150, 6.0, 6.0, 27.6, 1);
+
+INSERT INTO nudos_estructurales (codigo_nudo, coordenada_x, coordenada_y, coordenada_z, restriccion_gdl) VALUES
+('N1', 0.00, 0.00, 0.00, 'empotrado'),
+('N2', 5.00, 0.00, 0.00, 'articulado'),
+('N3', 5.00, 3.50, 0.00, 'libre');
+
+INSERT INTO uniones_atornilladas (nombre_union, tipo_conexion, numero_pernos, diametro_perno_mm, clase_perno, pretension_kn, id_perfil_viga, id_perfil_columna) VALUES
+('Conexión N1-N2', 'rígida', 8, 20.0, '10.9', 180.0, 1, 2),
+('Conexión N2-N3', 'articulada', 4, 16.0, '8.8', 90.0, 3, 1);
+
+INSERT INTO soldaduras (tipo_soldadura, electrodo, resistencia_ultima_mpa, garganta_mm, longitud_mm, id_union) VALUES
+('filete', 'E7018', 490, 6.0, 200, 1);
+
+INSERT INTO elementos_por_nudo (id_nudo, id_perfil, id_union, angulo_incidencia_grados, es_continuo) VALUES
+(1, 2, 1, 0.0, true),
+(2, 1, 1, 90.0, false),
+(2, 3, 2, 0.0, false);
+
+INSERT INTO cargas_en_nudos (id_nudo, fx_kn, fy_kn, fz_kn, mx_knm, my_knm, mz_knm, combinacion) VALUES
+(2, 50.0, 0.0, 0.0, 0.0, 0.0, 25.0, 'GRAVEDAD'),
+(3, 0.0, -120.0, 0.0, 0.0, 0.0, 0.0, 'GRAVEDAD');
+
+INSERT INTO inspecciones_conexiones (id_union, fecha_inspeccion, estado, torque_medido_nm, observaciones) VALUES
+(1, '2025-03-15', 'APROBADA', 450.0, 'Torque verificado según norma'),
+(2, '2025-03-20', 'APROBADA', 220.0, 'Cumple especificaciones');
+
+-- =====================================================
+-- VISTAS
+-- =====================================================
+
+CREATE VIEW vista_conexiones_completas AS
+SELECT 
+    u.nombre_union,
+    p1.nombre_perfil AS viga,
+    p2.nombre_perfil AS columna,
+    u.tipo_conexion,
+    u.numero_pernos,
+    u.diametro_perno_mm,
+    m.nombre_material
+FROM uniones_atornilladas u
+JOIN perfiles_estructurales p1 ON u.id_perfil_viga = p1.id_perfil
+JOIN perfiles_estructurales p2 ON u.id_perfil_columna = p2.id_perfil
+JOIN materiales m ON p1.id_material = m.id_material;
+
+-- =====================================================
+-- CONSULTAS DE PRUEBA
+-- =====================================================
+
+SELECT * FROM vista_conexiones_completas;
+SELECT * FROM uniones_atornilladas LEFT JOIN soldaduras USING(id_union);
+SELECT n.codigo_nudo, c.fx_kn, c.fy_kn, c.combinacion 
+FROM cargas_en_nudos c JOIN nudos_estructurales n USING(id_nudo);
